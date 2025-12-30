@@ -1,0 +1,189 @@
+# =============================================================================
+# CSM Voice Service - Docker Compose Configuration
+# =============================================================================
+#
+# Services:
+# - voice-api: Main FastAPI voice synthesis service
+# - postgres: Database for voice profiles
+# - redis: Caching and job queue
+# - traefik: Reverse proxy with SSL (optional)
+#
+# Usage:
+#   docker-compose up -d
+#   docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d  # With GPU
+#
+
+version: "3.9"
+
+services:
+  # ===========================================================================
+  # Voice API Service
+  # ===========================================================================
+  voice-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        USE_CUDA: "false"
+    image: csm-voice:latest
+    container_name: csm-voice-api
+    restart: unless-stopped
+
+    ports:
+      - "8000:8000"
+
+    environment:
+      # Service config
+      CSM_ENVIRONMENT: production
+      CSM_API_HOST: "0.0.0.0"
+      CSM_API_PORT: "8000"
+      CSM_API_WORKERS: "1"
+      CSM_DEBUG: "false"
+
+      # Model config
+      CSM_MODEL_PATH: /app/models/csm-1b
+      CSM_MODEL_DEVICE: cpu
+      CSM_MODEL_DTYPE: float32
+
+      # Database
+      CSM_DATABASE_URL: postgresql://csm:csm_password@postgres:5432/csm_voices
+      CSM_REDIS_URL: redis://redis:6379/0
+
+      # Storage
+      CSM_VOICE_PROFILES_DIR: /app/voice_profiles
+
+      # API Key (set in .env file)
+      CSM_API_KEY: ${CSM_API_KEY:-}
+
+      # Cloud GPU (for training)
+      CSM_TRAINING_GPU_PROVIDER: runpod
+      CSM_RUNPOD_API_KEY: ${RUNPOD_API_KEY:-}
+
+    volumes:
+      # Model weights (download separately or mount from host)
+      - ./models:/app/models:ro
+      # Voice profiles (persistent)
+      - voice_profiles:/app/voice_profiles
+      # Logs
+      - logs:/app/logs
+
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+    networks:
+      - csm-network
+
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.voice-api.rule=Host(`voice.humanlike.io`)"
+      - "traefik.http.routers.voice-api.tls=true"
+      - "traefik.http.routers.voice-api.tls.certresolver=letsencrypt"
+      - "traefik.http.services.voice-api.loadbalancer.server.port=8000"
+
+  # ===========================================================================
+  # PostgreSQL Database
+  # ===========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: csm-postgres
+    restart: unless-stopped
+
+    environment:
+      POSTGRES_USER: csm
+      POSTGRES_PASSWORD: csm_password
+      POSTGRES_DB: csm_voices
+
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Init scripts
+      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/init.sql:ro
+
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U csm -d csm_voices"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - csm-network
+
+  # ===========================================================================
+  # Redis Cache
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: csm-redis
+    restart: unless-stopped
+
+    command: redis-server --appendonly yes
+
+    volumes:
+      - redis_data:/data
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+    networks:
+      - csm-network
+
+  # ===========================================================================
+  # Traefik Reverse Proxy (Optional)
+  # ===========================================================================
+  traefik:
+    image: traefik:v2.10
+    container_name: csm-traefik
+    restart: unless-stopped
+    profiles:
+      - production
+
+    command:
+      - "--api.dashboard=true"
+      - "--providers.docker=true"
+      - "--providers.docker.exposedbydefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge=true"
+      - "--certificatesresolvers.letsencrypt.acme.httpchallenge.entrypoint=web"
+      - "--certificatesresolvers.letsencrypt.acme.email=${ACME_EMAIL:-admin@humanlike.io}"
+      - "--certificatesresolvers.letsencrypt.acme.storage=/letsencrypt/acme.json"
+
+    ports:
+      - "80:80"
+      - "443:443"
+
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - letsencrypt:/letsencrypt
+
+    networks:
+      - csm-network
+
+# =============================================================================
+# Networks
+# =============================================================================
+networks:
+  csm-network:
+    driver: bridge
+
+# =============================================================================
+# Volumes
+# =============================================================================
+volumes:
+  postgres_data:
+  redis_data:
+  voice_profiles:
+  logs:
+  letsencrypt:

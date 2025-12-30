@@ -1,0 +1,53 @@
+{
+  "name": "CSM Voice Service",
+  "description": "Production voice synthesis service using CSM (Conversational Speech Model)",
+  "dockerImage": "csm-voice:cuda",
+  "containerDiskInGb": 50,
+  "volumeInGb": 100,
+  "volumeMountPath": "/workspace",
+  "ports": "8000/http",
+  "env": [
+    {
+      "key": "CSM_API_HOST",
+      "value": "0.0.0.0"
+    },
+    {
+      "key": "CSM_API_PORT",
+      "value": "8000"
+    },
+    {
+      "key": "CSM_MODEL_PATH",
+      "value": "/workspace/models/csm-1b"
+    },
+    {
+      "key": "CSM_MODEL_DEVICE",
+      "value": "cuda"
+    },
+    {
+      "key": "CSM_MODEL_DTYPE",
+      "value": "bfloat16"
+    },
+    {
+      "key": "CSM_VOICE_PROFILES_DIR",
+      "value": "/workspace/voice_profiles"
+    },
+    {
+      "key": "CSM_ENVIRONMENT",
+      "value": "production"
+    }
+  ],
+  "startupCommands": [
+    "cd /workspace",
+    "if [ ! -d models/csm-1b ]; then python -c \"from huggingface_hub import snapshot_download; snapshot_download('sesame/csm-1b', local_dir='models/csm-1b')\"; fi",
+    "python -m uvicorn api.main:app --host 0.0.0.0 --port 8000"
+  ],
+  "gpuTypes": [
+    "NVIDIA A100 80GB PCIe",
+    "NVIDIA A100-SXM4-80GB",
+    "NVIDIA GeForce RTX 4090",
+    "NVIDIA H100 PCIe"
+  ],
+  "gpuCount": 1,
+  "minVcpuCount": 4,
+  "minMemoryInGb": 32
+}

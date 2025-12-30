@@ -22,9 +22,46 @@ class Segment:
 def load_llama3_tokenizer():
     """
     https://github.com/huggingface/transformers/issues/22794#issuecomment-2092623992
+
+    Try to load from local CSM model first, then fall back to Llama-3.2-1B.
     """
-    tokenizer_name = "meta-llama/Llama-3.2-1B"
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    import os
+    import glob
+
+    # Try local CSM tokenizer first (doesn't require Llama access)
+    local_paths = [
+        "./models/csm-1b",
+        os.path.expanduser("~/.cache/huggingface/hub/models--sesame--csm-1b/snapshots"),
+    ]
+
+    # Also check for snapshot directories
+    for cache_path in [
+        os.path.expanduser("~/.cache/huggingface/hub/models--sesame--csm-1b/snapshots/*"),
+    ]:
+        snapshots = glob.glob(cache_path)
+        if snapshots:
+            local_paths.extend(snapshots)
+
+    tokenizer = None
+    for path in local_paths:
+        if os.path.exists(path):
+            # Check if tokenizer files exist
+            tokenizer_file = os.path.join(path, "tokenizer.json")
+            if os.path.exists(tokenizer_file):
+                try:
+                    tokenizer = AutoTokenizer.from_pretrained(path, local_files_only=True)
+                    print(f"Loaded tokenizer from: {path}")
+                    break
+                except Exception as e:
+                    print(f"Failed to load tokenizer from {path}: {e}")
+                    continue
+
+    # Fall back to Llama tokenizer if local not found
+    if tokenizer is None:
+        print("Local tokenizer not found, trying Llama-3.2-1B (requires access)")
+        tokenizer_name = "meta-llama/Llama-3.2-1B"
+        tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+
     bos = tokenizer.bos_token
     eos = tokenizer.eos_token
     tokenizer._tokenizer.post_processor = TemplateProcessing(

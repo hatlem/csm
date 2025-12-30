@@ -1,0 +1,32 @@
+# =============================================================================
+# CSM Voice Service - GPU Override Configuration
+# =============================================================================
+#
+# Use this with the base docker-compose.yml for GPU-enabled inference.
+#
+# Usage:
+#   docker-compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#
+
+version: "3.9"
+
+services:
+  voice-api:
+    build:
+      args:
+        USE_CUDA: "true"
+        CUDA_VERSION: "12.1"
+
+    image: csm-voice:cuda
+
+    environment:
+      CSM_MODEL_DEVICE: cuda
+      CSM_MODEL_DTYPE: bfloat16
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]

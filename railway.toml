@@ -1,0 +1,25 @@
+# Railway deployment configuration for CSM Voice Service
+# Note: Railway doesn't have GPU support, so this is for API-only mode
+# or for development. For production with GPU, use RunPod or Modal.
+
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+numReplicas = 1
+sleepApplication = false
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3
+
+# Health check
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+# Environment variables to set in Railway dashboard:
+# CSM_API_KEY - Your API key
+# CSM_DATABASE_URL - Railway PostgreSQL URL (can use Human-Like's)
+# CSM_REDIS_URL - Railway Redis URL (can use Human-Like's)
+# CSM_MODEL_DEVICE - Set to "cpu" for Railway (no GPU)
+# CSM_MODEL_DTYPE - Set to "float32" for CPU
+# HF_TOKEN - HuggingFace token for model download
