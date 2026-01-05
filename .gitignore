@@ -53,3 +53,5 @@ context_audio.wav
 .playwright/
 playwright-report/
 test-results/
+.playwright-mcp/
+.claude/
