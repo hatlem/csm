@@ -48,3 +48,8 @@ context_audio.wav
 .zshrc
 .bashrc
 .bash_profile
+
+# Playwright
+.playwright/
+playwright-report/
+test-results/
